@@ -4,7 +4,7 @@
 create_at：2025/09/08
 aliases：验证WS2812B-RGB灯带以及驱动函数
 hardware：STM32F103RET6最小系统板
-software：RT-Thread
+platform：RT-Thread
 ```
 <font size=2>```ws2812b driver```是一款基于 SPI 的 WS2812B 灯带驱动软件包，基于 RT-Thread SPI框架 设计。通过 SPI 高速输出编码数据，实现流畅、稳定的多彩灯效展示。</font>
 
