@@ -17,14 +17,11 @@
 #include <rtdevice.h>
 #include <rthw.h>
 #include <rtdbg.h>
-#include <drv_spi.h>
 #include "main.h"
 
 
-#include "bsp_ws2812b_driver.h"
-#include "bsp_ws2812b_spi.h"
 #include "bsp_typedef.h"
-
+#include "bsp_ws2812b.h"
 
 
 

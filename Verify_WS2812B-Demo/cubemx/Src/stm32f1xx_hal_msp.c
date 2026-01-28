@@ -24,6 +24,7 @@
 
 /* USER CODE END Includes */
 
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
 
@@ -57,6 +58,7 @@
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
+
 
 
 /* USER CODE BEGIN 1 */

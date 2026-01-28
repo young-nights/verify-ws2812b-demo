@@ -36,17 +36,20 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-extern SPI_HandleTypeDef hspi1;
+extern TIM_HandleTypeDef htim3;
+extern DMA_HandleTypeDef hdma_tim3_ch3;
 
 extern UART_HandleTypeDef huart1;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
 void SystemClock_Config(void);
 void MX_GPIO_Init(void);
-void MX_SPI1_Init(void);
+void MX_DMA_Init(void);
 void MX_USART1_UART_Init(void);
+void MX_TIM3_Init(void);
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
@@ -54,8 +57,9 @@ void MX_USART1_UART_Init(void);
 
 /* USER CODE END EM */
 
-/* Exported functions prototypes ---------------------------------------------*/
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
+/* Exported functions prototypes ---------------------------------------------*/
 
 /* USER CODE BEGIN EFP */
 

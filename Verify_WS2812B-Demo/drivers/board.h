@@ -116,7 +116,7 @@ extern "C"
  *                 such as     #define HAL_SPI_MODULE_ENABLED
  */
 
-#define BSP_USING_SPI1
+/*#define BSP_USING_SPI1*/
 /*#define BSP_USING_SPI2*/
 /*#define BSP_USING_SPI3*/
 
@@ -163,7 +163,7 @@ extern "C"
 
 /*#define BSP_USING_PWM1*/
 /*#define BSP_USING_PWM2*/
-/*#define BSP_USING_PWM3*/
+#define BSP_USING_PWM3
 
 /*-------------------------- PWM CONFIG END --------------------------*/
 
@@ -221,8 +221,9 @@ extern "C"
  *
  */
 
-/*#define BSP_USING_TIM*/
+#define BSP_USING_TIM
 #ifdef BSP_USING_TIM
+#define BSP_USING_TIM3
 /*#define BSP_USING_TIM15*/
 /*#define BSP_USING_TIM16*/
 /*#define BSP_USING_TIM17*/
