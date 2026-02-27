@@ -15,7 +15,6 @@ void WS2812B_Thread_entry(void* parameter)
 {
 
 
-
     for(;;)
     {
 
@@ -48,8 +47,5 @@ int WS2812B_Thread_Init(void)
     return RT_EOK;
 }
 INIT_APP_EXPORT(WS2812B_Thread_Init);
-
-
-
 
 
