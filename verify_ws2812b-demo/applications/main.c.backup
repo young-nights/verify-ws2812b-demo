@@ -19,7 +19,7 @@
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
+__WEAK int main(void)
 {
 
   /* USER CODE BEGIN 1 */
@@ -48,11 +48,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  LOG_I("系统初始化完成");
-  
-  // 启动 WS2812B 任务
-  WS2812B_Thread_Init();
-  
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

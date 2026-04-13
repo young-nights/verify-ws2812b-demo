@@ -50,8 +50,6 @@ static void fill_led_pwm_data(uint16_t ledx, uint16_t *ptr);
 // 初始化
 void ws2812b_init(void)
 {
-    LOG_I("WS2812B 初始化开始");
-    
     // RT-Thread信号量
     dma_complete_sem = rt_sem_create("ws_sem", 0, RT_IPC_FLAG_FIFO);
     RT_ASSERT(dma_complete_sem != RT_NULL);
@@ -59,20 +57,15 @@ void ws2812b_init(void)
     // 启用TIM DMA请求 (CC3)
     __HAL_TIM_ENABLE_DMA(&htim3, TIM_DMA_CC3);
 
-    // NVIC中断启用
+    // NVIC中断启用 (CubeMX已配，但确认)
     HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
-    
-    LOG_I("WS2812B 初始化完成");
 }
 
 // 设置单个LED颜色 (GRB顺序)
 void ws2812b_set_color(uint16_t index, uint8_t g, uint8_t r, uint8_t b)
 {
-    if (index >= LED_COUNT) {
-        LOG_W("LED索引超出范围: %d (最大: %d)", index, LED_COUNT - 1);
-        return;
-    }
+    if (index >= LED_COUNT) return;
 
     leds_color_data[index * BYTES_PER_LED + 0] = g;
     leds_color_data[index * BYTES_PER_LED + 1] = r;
@@ -91,22 +84,19 @@ void ws2812b_set_all(uint8_t g, uint8_t r, uint8_t b)
 // 启动更新 (非阻塞)
 rt_err_t ws2812b_update(void)
 {
-    if (is_updating) {
-        LOG_W("WS2812B 正在更新中，请稍候");
-        return -RT_EBUSY;
-    }
+    if (is_updating) return -RT_EBUSY;
 
     is_updating = 1;
     led_cycles_cnt = LEDS_PER_DMA_IRQ;  // 初始计数
 
-    // 清缓冲并预填充前2*LEDS_PER_DMA_IRQ个LED数据
+    // 清缓冲并预填充前2*LEDS_PER_DMA_IRQ个LED数据 (参考文件逻辑)
     memset(ws2812_buffer, 0, sizeof(ws2812_buffer));
     for (uint16_t i = 0, index = RESET_PRE_MIN; i < 2 * LEDS_PER_DMA_IRQ && i < LED_COUNT; ++i, ++index)
     {
         fill_led_pwm_data(i, &ws2812_buffer[i * BITS_PER_LED]);
     }
 
-    // 配置DMA为Circular
+    // 配置DMA为Circular (即使CubeMX是Normal，手动设以模拟参考)
     hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
     HAL_DMA_Init(&hdma_tim3_ch3);
 
@@ -115,12 +105,10 @@ rt_err_t ws2812b_update(void)
                               (uint32_t *)ws2812_buffer,
                               DMA_BUFF_LEN) != HAL_OK)
     {
-        LOG_E("WS2812B DMA 启动失败");
         is_updating = 0;
         return -RT_ERROR;
     }
 
-    LOG_D("WS2812B 更新启动成功");
     return RT_EOK;
 }
 
@@ -190,24 +178,6 @@ void update_sequence(uint8_t is_tc)
         HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
         is_updating = 0;
         rt_sem_release(dma_complete_sem);
-        LOG_D("WS2812B 更新完成");
-    }
-}
-
-// HT/TC 中断处理
-void DMA1_Channel2_IRQHandler(void)
-{
-    HAL_DMA_IRQHandler(&hdma_tim3_ch3);
-    
-    if (__HAL_DMA_GET_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2))
-    {
-        __HAL_DMA_CLEAR_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2);
-        update_sequence(0);  // HT
-    }
-    if (__HAL_DMA_GET_FLAG(&hdma_tim3_ch3, DMA_FLAG_TC2))
-    {
-        __HAL_DMA_CLEAR_FLAG(&hdma_tim3_ch3, DMA_FLAG_TC2);
-        update_sequence(1);  // TC
     }
 }
 
@@ -226,68 +196,6 @@ static void fill_led_pwm_data(uint16_t ledx, uint16_t *ptr)
         ptr[i] = (g & (1 << (7 - i))) ? PWM_HIGH_1 : PWM_HIGH_0;
         ptr[8 + i] = (r & (1 << (7 - i))) ? PWM_HIGH_1 : PWM_HIGH_0;
         ptr[16 + i] = (b & (1 << (7 - i))) ? PWM_HIGH_1 : PWM_HIGH_0;
-    }
-}
-
-// 演示效果函数
-void ws2812b_demo_effects(void)
-{
-    static uint8_t demo_step = 0;
-    static uint32_t last_time = 0;
-    uint32_t current_time = rt_tick_get();
-    
-    // 每500ms切换一次效果
-    if (current_time - last_time >= 500)
-    {
-        last_time = current_time;
-        
-        switch (demo_step)
-        {
-            case 0: // 红色全亮
-                ws2812b_set_all(255, 0, 0);
-                ws2812b_update();
-                break;
-            case 1: // 绿色全亮
-                ws2812b_set_all(0, 255, 0);
-                ws2812b_update();
-                break;
-            case 2: // 蓝色全亮
-                ws2812b_set_all(0, 0, 255);
-                ws2812b_update();
-                break;
-            case 3: // 白色全亮
-                ws2812b_set_all(255, 255, 255);
-                ws2812b_update();
-                break;
-            case 4: // 流水灯效果
-                for (int i = 0; i < LED_COUNT; i++)
-                {
-                    ws2812b_set_color(i, 255, 255, 0);  // 黄色
-                    ws2812b_update();
-                    rt_thread_mdelay(50);
-                    ws2812b_set_color(i, 0, 0, 0);      // 关闭
-                }
-                break;
-            case 5: // 呼吸灯效果
-                for (int brightness = 0; brightness < 255; brightness += 5)
-                {
-                    ws2812b_set_all(brightness, brightness, brightness);
-                    ws2812b_update();
-                    rt_thread_mdelay(20);
-                }
-                for (int brightness = 255; brightness > 0; brightness -= 5)
-                {
-                    ws2812b_set_all(brightness, brightness, brightness);
-                    ws2812b_update();
-                    rt_thread_mdelay(20);
-                }
-                break;
-            default:
-                demo_step = 0;
-                break;
-        }
-        
-        demo_step = (demo_step + 1) % 6;
     }
 }
 

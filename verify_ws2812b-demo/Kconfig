@@ -18,7 +18,7 @@ config PKGS_DIR
 config PLATFORM_DIR
     string
     option env="PLATFORM_DIR"
-    default "C:/Users/18452/Documents/Github_youngnights/ws2812b-verify-demo/Verify_WS2812B-Demo/platform"
+    default "I:/GitHub-young-nights/verify-ws2812b-demo/verify_ws2812b-demo/platform"
 
 source "$RTT_DIR/Kconfig"
 source "$PKGS_DIR/Kconfig"
