@@ -28,7 +28,7 @@ __attribute__((aligned(4))) uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
 // 控制变量
 static volatile uint8_t is_updating = 0;    // 传输中标志
 static volatile uint32_t led_cycles_cnt;    // 已传LED周期计数
-static rt_sem_t dma_complete_sem = RT_NULL; // 完成信号量
+rt_sem_t dma_complete_sem = RT_NULL; // [FIX2] 改为全局可见，供 ws2812b_demo_effects() 使用
 
 // 应用颜色缓冲区 (RGB, 用户修改此数组)
 static uint8_t leds_color_data[BYTES_PER_LED * LED_COUNT] = {0};
@@ -163,7 +163,7 @@ void update_sequence(uint8_t is_tc)
     }
     else if (led_cycles_cnt < (RESET_PRE_MIN + LED_COUNT))
     {
-        // 数据填充
+        // [FIX2] 数据填充 - next_led < LED_COUNT 防止越界，超出时由后续memset填0
         uint16_t next_led = led_cycles_cnt - RESET_PRE_MIN;
         uint16_t count = 0;
         for (; count < LEDS_PER_DMA_IRQ && next_led < LED_COUNT; ++count, ++next_led)
@@ -176,7 +176,7 @@ void update_sequence(uint8_t is_tc)
             memset(&buf_ptr[count * BITS_PER_LED], 0, (LEDS_PER_DMA_IRQ - count) * BITS_PER_LED * sizeof(uint16_t));
         }
     }
-    else if (led_cycles_cnt < (RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN + LEDS_PER_DMA_IRQ))
+    else if (led_cycles_cnt < (RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN)) // [FIX2] 去掉多余 LEDS_PER_DMA_IRQ 偏移
     {
         // 后复位：填0
         memset(buf_ptr, 0, DMA_HALF_LEN * sizeof(uint16_t));
@@ -244,26 +244,33 @@ void ws2812b_demo_effects(void)
             case 0: // 红色全亮
                 ws2812b_set_all(255, 0, 0);
                 ws2812b_update();
+                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                 break;
             case 1: // 绿色全亮
                 ws2812b_set_all(0, 255, 0);
                 ws2812b_update();
+                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                 break;
             case 2: // 蓝色全亮
                 ws2812b_set_all(0, 0, 255);
                 ws2812b_update();
+                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                 break;
             case 3: // 白色全亮
                 ws2812b_set_all(255, 255, 255);
                 ws2812b_update();
+                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                 break;
             case 4: // 流水灯效果
                 for (int i = 0; i < LED_COUNT; i++)
                 {
                     ws2812b_set_color(i, 255, 255, 0);  // 黄色
                     ws2812b_update();
+                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                     rt_thread_mdelay(50);
                     ws2812b_set_color(i, 0, 0, 0);      // 关闭
+                    ws2812b_update();
+                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                 }
                 break;
             case 5: // 呼吸灯效果
@@ -271,12 +278,14 @@ void ws2812b_demo_effects(void)
                 {
                     ws2812b_set_all(brightness, brightness, brightness);
                     ws2812b_update();
+                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                     rt_thread_mdelay(20);
                 }
                 for (int brightness = 255; brightness > 0; brightness -= 5)
                 {
                     ws2812b_set_all(brightness, brightness, brightness);
                     ws2812b_update();
+                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
                     rt_thread_mdelay(20);
                 }
                 break;

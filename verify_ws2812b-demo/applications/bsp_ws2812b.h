@@ -20,14 +20,17 @@
 
 #define LED_COUNT       30          // LED数量，根据需要修改
 #define PWM_PERIOD      89          // TIM周期值 (ARR = 89, 72MHz / 90 ≈ 800kHz)
-#define PWM_HIGH_0      32          // '0'高电平ticks ≈0.4μs (32/256 * 1.25μs)
-#define PWM_HIGH_1      64          // '1'高电平ticks ≈0.8μs (64/256 * 1.25μs)
+#define PWM_HIGH_0      29          // [FIX2] '0'高电平ticks ≈0.403μs (29/90 * 1.25μs)
+#define PWM_HIGH_1      58          // [FIX2] '1'高电平ticks ≈0.806μs (58/90 * 1.25μs)
 #define RESET_PRE_MIN   10          // 复位前最小LED周期 (参考文件: >280us ≈10 cycles)
 #define RESET_POST_MIN  8           // 复位后最小LED周期
 #define LEDS_PER_DMA_IRQ 4          // 每个DMA中断处理的LED数 (参考文件: 4, 平衡中断频率)
 
 // 缓冲区：双缓冲 (HT/TC)，每个部分 LEDS_PER_DMA_IRQ * 24 个 uint16_t
 extern uint16_t ws2812_buffer[2 * LEDS_PER_DMA_IRQ * 24];
+
+// [FIX2] 全局信号量声明，供 ws2812b_demo_effects() 等待 DMA 完成
+extern rt_sem_t dma_complete_sem;
 
 // 函数声明
 void ws2812b_init(void);
