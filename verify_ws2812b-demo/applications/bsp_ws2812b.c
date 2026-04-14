@@ -48,6 +48,10 @@ void ws2812b_init(void)
     __HAL_RCC_TIM3_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
 
+    // [FIX] 问题2补充: 在初始化阶段配置DMA为CIRCULAR模式（仅执行一次）
+    hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
+    HAL_DMA_Init(&hdma_tim3_ch3);
+
     // RT-Thread信号量
     dma_complete_sem = rt_sem_create("ws_sem", 0, RT_IPC_FLAG_FIFO);
     RT_ASSERT(dma_complete_sem != RT_NULL);
@@ -102,9 +106,7 @@ rt_err_t ws2812b_update(void)
         fill_led_pwm_data(i, &ws2812_buffer[i * BITS_PER_LED]);
     }
 
-    // [FIX] 问题2: 删除HAL_DMA_Init，DMA已在CubeMX初始化时配置一次
-    // 运行中不应重复初始化，否则会破坏DMA寄存器状态导致HardFault
-    hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;  // 保留模式设置（HAL可能内部使用）
+    // DMA模式已在ws2812b_init()中配置为CIRCULAR，无需重复设置
 
     // 启动PWM DMA (全缓冲长度)
     if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3,
