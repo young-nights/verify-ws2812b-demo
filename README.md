@@ -14,13 +14,12 @@ platform: RT-Thread 5.0.0
 
 | 接口 | 引脚 | 说明 |
 |------|------|------|
-| WS2812B DIN | PA0 (TIM3_CH3) | PWM 输出，3.3V 直连 |
+| WS2812B DIN | PB0 (TIM3_CH3) | PWM 输出 |
 | VDD | 5V | 灯带供电 |
 | GND | GND | 共地 |
 
-铝基板预留 MOSI 数据引脚、VDD、GND 接口。
 
-![铝基板](./images/ws2812b_images1.jpg)
+![灯板](./images/ws2812b_images.jpg)
 
 ---
 
@@ -67,7 +66,7 @@ DMA 循环传输 → HT/TC 中断触发 update_sequence()
 5. **Pulse (CCR3)**: 0 （初始占空比 0）
 6. **CH3 Polarity**: High
 
-![TIM3配置](./images/ws2812b_images3.png)
+![TIM3配置](./images/ws2812b1.png)
 
 ### 3.2 DMA 配置
 
@@ -77,7 +76,7 @@ DMA 循环传输 → HT/TC 中断触发 update_sequence()
 4. **Mode**: **Circular**（必须，双缓冲依赖此模式）
 5. **Data Width**: Half Word（16bit，匹配 PWM 占空比寄存器）
 
-![DMA配置](./images/ws2812b_images2.png)
+![DMA配置](./images/ws2812b2.png)
 
 ### 3.3 NVIC 配置
 
