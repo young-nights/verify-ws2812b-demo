@@ -19,7 +19,7 @@ void WS2812B_Thread_entry(void* parameter)
     
     while(1)
     {
-//        ws2812b_demo_effects();  // 运行演示效果
+        ws2812b_demo_effects();  // 运行演示效果
         rt_thread_mdelay(500);    // 50ms循环一次
         ws2812b_update();
     }
@@ -33,7 +33,7 @@ rt_thread_t WS2812B_Task_Handle = RT_NULL;
 int WS2812B_Thread_Init(void)
 {
     // [FIX] 问题4: 线程栈从4096扩大到8192，防止DMA操作+效果函数溢出
-WS2812B_Task_Handle = rt_thread_create("WS2812B_Thread", WS2812B_Thread_entry, RT_NULL, 8192, 9, 100);
+    WS2812B_Task_Handle = rt_thread_create("WS2812B_Thread", WS2812B_Thread_entry, RT_NULL, 8192, 9, 100);
     
     if(WS2812B_Task_Handle != RT_NULL)
     {

@@ -96,7 +96,7 @@ rt_err_t ws2812b_update(void)
 
     memset(ws2812_buffer, 0, sizeof(ws2812_buffer));
 
-    if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3, (uint16_t *)ws2812_buffer, DMA_BUFF_LEN) != HAL_OK)
+    if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3, (uint32_t *)ws2812_buffer, DMA_BUFF_LEN) != HAL_OK)
     {
         LOG_E("DMA启动失败");
         is_updating = 0;
