@@ -51,7 +51,7 @@ int main(void)
   LOG_I("系统初始化完成");
   
   // 启动 WS2812B 任务
-  WS2812B_Thread_Init();
+//  WS2812B_Thread_Init();
   
   /* USER CODE END 2 */
 
