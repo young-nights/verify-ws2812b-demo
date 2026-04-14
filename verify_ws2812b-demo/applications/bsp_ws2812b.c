@@ -22,7 +22,8 @@ extern DMA_HandleTypeDef hdma_tim3_ch3;
 #define BITS_PER_IRQ    (LEDS_PER_DMA_IRQ * BITS_PER_LED)      // 每个中断处理的位数
 
 // 数据缓冲区：uint16_t (HAL PWM DMA用 HalfWord)
-uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
+// [FIX] 问题7: 添加ALIGN(4)确保DMA对齐
+ALIGN(4) uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
 
 // 控制变量
 static volatile uint8_t is_updating = 0;    // 传输中标志
@@ -32,17 +33,8 @@ static rt_sem_t dma_complete_sem = RT_NULL; // 完成信号量
 // 应用颜色缓冲区 (RGB, 用户修改此数组)
 static uint8_t leds_color_data[BYTES_PER_LED * LED_COUNT] = {0};
 
-// DMA中断回调（HAL自动调用）
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Instance == TIM3 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
-    {
-        HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_3);
-        is_updating = 0;
-        if (dma_complete_sem)
-            rt_sem_release(dma_complete_sem);
-    }
-}
+// [FIX] 问题1: 删除HAL_TIM_PWM_PulseFinishedCallback，避免与DMA1_Channel2_IRQHandler竞争
+// DMA完成逻辑统一在update_sequence()的完成分支中处理
 
 // 前向声明
 static void fill_led_pwm_data(uint16_t ledx, uint16_t *ptr);
@@ -51,7 +43,15 @@ static void fill_led_pwm_data(uint16_t ledx, uint16_t *ptr);
 void ws2812b_init(void)
 {
     LOG_I("WS2812B 初始化开始");
-    
+
+    // [FIX] 问题3: 显式使能TIM3和DMA1时钟
+    __HAL_RCC_TIM3_CLK_ENABLE();
+    __HAL_RCC_DMA1_CLK_ENABLE();
+
+    // [FIX] 问题2补充: 在初始化阶段配置DMA为CIRCULAR模式（仅执行一次）
+    hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
+    HAL_DMA_Init(&hdma_tim3_ch3);
+
     // RT-Thread信号量
     dma_complete_sem = rt_sem_create("ws_sem", 0, RT_IPC_FLAG_FIFO);
     RT_ASSERT(dma_complete_sem != RT_NULL);
@@ -106,9 +106,7 @@ rt_err_t ws2812b_update(void)
         fill_led_pwm_data(i, &ws2812_buffer[i * BITS_PER_LED]);
     }
 
-    // 配置DMA为Circular
-    hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
-    HAL_DMA_Init(&hdma_tim3_ch3);
+    // DMA模式已在ws2812b_init()中配置为CIRCULAR，无需重复设置
 
     // 启动PWM DMA (全缓冲长度)
     if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3,
