@@ -22,8 +22,8 @@ extern DMA_HandleTypeDef hdma_tim3_ch3;
 #define BITS_PER_IRQ    (LEDS_PER_DMA_IRQ * BITS_PER_LED)      // 每个中断处理的位数
 
 // 数据缓冲区：uint16_t (HAL PWM DMA用 HalfWord)
-// [FIX] 问题7: 添加ALIGN(4)确保DMA对齐
-ALIGN(4) uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
+// [FIX] 问题7: 添加aligned(4)确保DMA对齐
+__attribute__((aligned(4))) uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
 
 // 控制变量
 static volatile uint8_t is_updating = 0;    // 传输中标志
