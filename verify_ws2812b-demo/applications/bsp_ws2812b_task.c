@@ -19,8 +19,9 @@ void WS2812B_Thread_entry(void* parameter)
     
     while(1)
     {
-        ws2812b_demo_effects();  // 运行演示效果
-        rt_thread_mdelay(50);    // 50ms循环一次
+//        ws2812b_demo_effects();  // 运行演示效果
+        rt_thread_mdelay(500);    // 50ms循环一次
+        ws2812b_update();
     }
 }
 

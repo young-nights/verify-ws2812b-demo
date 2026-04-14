@@ -48,15 +48,9 @@ void ws2812b_init(void)
     __HAL_RCC_TIM3_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
 
-    // [FIX3-1] 保留Mode赋值但不重复HAL_DMA_Init，CubeMX的HAL_TIM_PWM_MspInit已初始化
-    hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
-
     // RT-Thread信号量
     dma_complete_sem = rt_sem_create("ws_sem", 0, RT_IPC_FLAG_FIFO);
     RT_ASSERT(dma_complete_sem != RT_NULL);
-
-    // 启用TIM DMA请求 (CC3)
-    __HAL_TIM_ENABLE_DMA(&htim3, TIM_DMA_CC3);
 
     // NVIC中断启用
     HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
@@ -91,24 +85,20 @@ void ws2812b_set_all(uint8_t g, uint8_t r, uint8_t b)
 rt_err_t ws2812b_update(void)
 {
     if (is_updating) {
-        LOG_W("WS2812B 正在更新中，请稍候");
+        LOG_W("WS2812B 正在更新中，跳过本次");
         return -RT_EBUSY;
     }
 
     is_updating = 1;
-    led_index = 0;  // [FIX3-2] 从0开始，reset阶段先填0
+    led_index = 0;
 
-    // [FIX3-2] 清缓冲并预填充前半区（reset阶段填0）
+    HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_3);  // 确保干净启动
+
     memset(ws2812_buffer, 0, sizeof(ws2812_buffer));
 
-    // DMA模式已在ws2812b_init()中配置为CIRCULAR，无需重复设置
-
-    // 启动PWM DMA (全缓冲长度)
-    if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3,
-                              (uint16_t *)ws2812_buffer,
-                              DMA_BUFF_LEN) != HAL_OK)
+    if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3, (uint16_t *)ws2812_buffer, DMA_BUFF_LEN) != HAL_OK)
     {
-        LOG_E("WS2812B DMA 启动失败");
+        LOG_E("DMA启动失败");
         is_updating = 0;
         return -RT_ERROR;
     }
@@ -120,47 +110,40 @@ rt_err_t ws2812b_update(void)
 // [FIX3-2] 更新序列 (重构：用led_index替代led_cycles_cnt，语义更清晰)
 void update_sequence(uint8_t is_tc)
 {
-    uint16_t *buf_ptr = &ws2812_buffer[is_tc ? DMA_HALF_LEN : 0];
-
     if (!is_updating) return;
 
-    // 前 RESET_PRE_MIN 个周期填 0（复位前）
-    if (led_index < RESET_PRE_MIN)
+    uint16_t *buf_ptr = is_tc ? &ws2812_buffer[DMA_HALF_LEN] : ws2812_buffer;
+
+    // 填充下一半缓冲区
+    for (uint16_t i = 0; i < LEDS_PER_DMA_IRQ; i++)
     {
-        memset(buf_ptr, 0, DMA_HALF_LEN * sizeof(uint16_t));
-        led_index += LEDS_PER_DMA_IRQ;
-    }
-    // 数据填充阶段
-    else if (led_index < RESET_PRE_MIN + LED_COUNT)
-    {
-        uint16_t start = led_index - RESET_PRE_MIN;
-        uint16_t count = 0;
-        for (uint16_t i = 0; i < LEDS_PER_DMA_IRQ && (start + i) < LED_COUNT; i++)
+        if (led_index < RESET_PRE_MIN)
         {
-            fill_led_pwm_data(start + i, &buf_ptr[i * BITS_PER_LED]);
-            count++;
+            // 前复位：全0
+            memset(&buf_ptr[i * BITS_PER_LED], 0, BITS_PER_LED * sizeof(uint16_t));
         }
-        // 剩余填 0
-        if (count < LEDS_PER_DMA_IRQ)
+        else if (led_index < RESET_PRE_MIN + LED_COUNT)
         {
-            memset(&buf_ptr[count * BITS_PER_LED], 0,
-                   (LEDS_PER_DMA_IRQ - count) * BITS_PER_LED * sizeof(uint16_t));
+            // 数据区
+            uint16_t led_idx = led_index - RESET_PRE_MIN;
+            fill_led_pwm_data(led_idx, &buf_ptr[i * BITS_PER_LED]);
         }
-        led_index += LEDS_PER_DMA_IRQ;
+        else
+        {
+            // 后复位：全0
+            memset(&buf_ptr[i * BITS_PER_LED], 0, BITS_PER_LED * sizeof(uint16_t));
+        }
+        led_index++;
     }
-    // 后 RESET_POST_MIN 个周期填 0（复位后）
-    else if (led_index < RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN)
+
+    // 全部发送完成 + 足够复位后停止
+    if (led_index >= RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN + 20)  // 多加20个周期确保复位
     {
-        memset(buf_ptr, 0, DMA_HALF_LEN * sizeof(uint16_t));
-        led_index += LEDS_PER_DMA_IRQ;
-    }
-    else
-    {
-        // 完成
-        HAL_DMA_Abort(&hdma_tim3_ch3);
-        HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
+        HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_3);
+        // HAL_TIM_Base_Stop(&htim3);   // 可选
+
         is_updating = 0;
-        led_index = 0;  // 重置
+        led_index = 0;
         rt_sem_release(dma_complete_sem);
         LOG_D("WS2812B 更新完成");
     }
