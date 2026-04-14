@@ -27,7 +27,7 @@ __attribute__((aligned(4))) uint16_t ws2812_buffer[DMA_BUFF_LEN] = {0};
 
 // 控制变量
 static volatile uint8_t is_updating = 0;    // 传输中标志
-static volatile uint32_t led_cycles_cnt;    // 已传LED周期计数
+static volatile uint16_t led_index = 0;     // [FIX3-2] 当前已处理的LED周期计数
 rt_sem_t dma_complete_sem = RT_NULL; // [FIX2] 改为全局可见，供 ws2812b_demo_effects() 使用
 
 // 应用颜色缓冲区 (RGB, 用户修改此数组)
@@ -48,9 +48,8 @@ void ws2812b_init(void)
     __HAL_RCC_TIM3_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
 
-    // [FIX] 问题2补充: 在初始化阶段配置DMA为CIRCULAR模式（仅执行一次）
+    // [FIX3-1] 保留Mode赋值但不重复HAL_DMA_Init，CubeMX的HAL_TIM_PWM_MspInit已初始化
     hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR;
-    HAL_DMA_Init(&hdma_tim3_ch3);
 
     // RT-Thread信号量
     dma_complete_sem = rt_sem_create("ws_sem", 0, RT_IPC_FLAG_FIFO);
@@ -97,14 +96,10 @@ rt_err_t ws2812b_update(void)
     }
 
     is_updating = 1;
-    led_cycles_cnt = LEDS_PER_DMA_IRQ;  // 初始计数
+    led_index = 0;  // [FIX3-2] 从0开始，reset阶段先填0
 
-    // 清缓冲并预填充前2*LEDS_PER_DMA_IRQ个LED数据
+    // [FIX3-2] 清缓冲并预填充前半区（reset阶段填0）
     memset(ws2812_buffer, 0, sizeof(ws2812_buffer));
-    for (uint16_t i = 0, index = RESET_PRE_MIN; i < 2 * LEDS_PER_DMA_IRQ && i < LED_COUNT; ++i, ++index)
-    {
-        fill_led_pwm_data(i, &ws2812_buffer[i * BITS_PER_LED]);
-    }
 
     // DMA模式已在ws2812b_init()中配置为CIRCULAR，无需重复设置
 
@@ -122,81 +117,58 @@ rt_err_t ws2812b_update(void)
     return RT_EOK;
 }
 
-// DMA通道IRQ (手动处理HT/TC，类似参考文件)
-//void DMA1_Channel2_IRQHandler(void)
-//{
-//    HAL_DMA_IRQHandler(&hdma_tim3_ch3);
-//
-//    // 手动检查HT/TC标志 (HAL不直接处理PWM Pulse回调为HT)
-//    if (__HAL_DMA_GET_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2))
-//    {
-//        __HAL_DMA_CLEAR_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2);
-//        update_sequence(0);  // HT
-//    }
-//    if (__HAL_DMA_GET_FLAG(&hdma_tim3_ch3, DMA_FLAG_TC2))
-//    {
-//        __HAL_DMA_CLEAR_FLAG(&hdma_tim3_ch3, DMA_FLAG_TC2);
-//        update_sequence(1);  // TC
-//    }
-//}
-
-// 更新序列 (参考文件核心逻辑，适配HAL)
+// [FIX3-2] 更新序列 (重构：用led_index替代led_cycles_cnt，语义更清晰)
 void update_sequence(uint8_t is_tc)
 {
     uint16_t *buf_ptr = &ws2812_buffer[is_tc ? DMA_HALF_LEN : 0];
 
     if (!is_updating) return;
 
-    led_cycles_cnt += LEDS_PER_DMA_IRQ;
-
-    if (led_cycles_cnt < RESET_PRE_MIN)
+    // 前 RESET_PRE_MIN 个周期填 0（复位前）
+    if (led_index < RESET_PRE_MIN)
     {
-        // 预复位：如果不align，预填部分LED
-        if ((led_cycles_cnt + LEDS_PER_DMA_IRQ) > RESET_PRE_MIN)
-        {
-            uint16_t index = RESET_PRE_MIN - led_cycles_cnt;
-            for (uint16_t i = 0; index < LEDS_PER_DMA_IRQ && i < LED_COUNT; ++index, ++i)
-            {
-                fill_led_pwm_data(i, &buf_ptr[index * BITS_PER_LED]);
-            }
-        }
+        memset(buf_ptr, 0, DMA_HALF_LEN * sizeof(uint16_t));
+        led_index += LEDS_PER_DMA_IRQ;
     }
-    else if (led_cycles_cnt < (RESET_PRE_MIN + LED_COUNT))
+    // 数据填充阶段
+    else if (led_index < RESET_PRE_MIN + LED_COUNT)
     {
-        // [FIX2] 数据填充 - next_led < LED_COUNT 防止越界，超出时由后续memset填0
-        uint16_t next_led = led_cycles_cnt - RESET_PRE_MIN;
+        uint16_t start = led_index - RESET_PRE_MIN;
         uint16_t count = 0;
-        for (; count < LEDS_PER_DMA_IRQ && next_led < LED_COUNT; ++count, ++next_led)
+        for (uint16_t i = 0; i < LEDS_PER_DMA_IRQ && (start + i) < LED_COUNT; i++)
         {
-            fill_led_pwm_data(next_led, &buf_ptr[count * BITS_PER_LED]);
+            fill_led_pwm_data(start + i, &buf_ptr[i * BITS_PER_LED]);
+            count++;
         }
-        // 剩余填0 (后复位)
+        // 剩余填 0
         if (count < LEDS_PER_DMA_IRQ)
         {
-            memset(&buf_ptr[count * BITS_PER_LED], 0, (LEDS_PER_DMA_IRQ - count) * BITS_PER_LED * sizeof(uint16_t));
+            memset(&buf_ptr[count * BITS_PER_LED], 0,
+                   (LEDS_PER_DMA_IRQ - count) * BITS_PER_LED * sizeof(uint16_t));
         }
+        led_index += LEDS_PER_DMA_IRQ;
     }
-    else if (led_cycles_cnt < (RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN)) // [FIX2] 去掉多余 LEDS_PER_DMA_IRQ 偏移
+    // 后 RESET_POST_MIN 个周期填 0（复位后）
+    else if (led_index < RESET_PRE_MIN + LED_COUNT + RESET_POST_MIN)
     {
-        // 后复位：填0
         memset(buf_ptr, 0, DMA_HALF_LEN * sizeof(uint16_t));
+        led_index += LEDS_PER_DMA_IRQ;
     }
     else
     {
-        // 完成：停DMA/TIM
+        // 完成
         HAL_DMA_Abort(&hdma_tim3_ch3);
         HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
         is_updating = 0;
+        led_index = 0;  // 重置
         rt_sem_release(dma_complete_sem);
         LOG_D("WS2812B 更新完成");
     }
 }
 
-// HT/TC 中断处理
+// [FIX3-6] HT/TC 中断处理（移除HAL_DMA_IRQHandler避免它清除HT/TC标志）
 void DMA1_Channel2_IRQHandler(void)
 {
-    HAL_DMA_IRQHandler(&hdma_tim3_ch3);
-    
     if (__HAL_DMA_GET_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2))
     {
         __HAL_DMA_CLEAR_FLAG(&hdma_tim3_ch3, DMA_FLAG_HT2);
@@ -244,33 +216,33 @@ void ws2812b_demo_effects(void)
             case 0: // 红色全亮
                 ws2812b_set_all(255, 0, 0);
                 ws2812b_update();
-                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                 break;
             case 1: // 绿色全亮
                 ws2812b_set_all(0, 255, 0);
                 ws2812b_update();
-                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                 break;
             case 2: // 蓝色全亮
                 ws2812b_set_all(0, 0, 255);
                 ws2812b_update();
-                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                 break;
             case 3: // 白色全亮
                 ws2812b_set_all(255, 255, 255);
                 ws2812b_update();
-                rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                 break;
             case 4: // 流水灯效果
                 for (int i = 0; i < LED_COUNT; i++)
                 {
                     ws2812b_set_color(i, 255, 255, 0);  // 黄色
                     ws2812b_update();
-                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                    if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                     rt_thread_mdelay(50);
                     ws2812b_set_color(i, 0, 0, 0);      // 关闭
                     ws2812b_update();
-                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                    if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                 }
                 break;
             case 5: // 呼吸灯效果
@@ -278,14 +250,14 @@ void ws2812b_demo_effects(void)
                 {
                     ws2812b_set_all(brightness, brightness, brightness);
                     ws2812b_update();
-                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                    if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                     rt_thread_mdelay(20);
                 }
                 for (int brightness = 255; brightness > 0; brightness -= 5)
                 {
                     ws2812b_set_all(brightness, brightness, brightness);
                     ws2812b_update();
-                    rt_sem_take(dma_complete_sem, RT_WAITING_FOREVER); // [FIX2] 等待DMA完成
+                    if (rt_sem_take(dma_complete_sem, 100) != RT_EOK) LOG_W("WS2812B DMA 超时，跳过本次更新"); // [FIX3-5] 超时保护
                     rt_thread_mdelay(20);
                 }
                 break;

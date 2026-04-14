@@ -1,0 +1,8 @@
+序号,问题类别,严重程度,具体描述,修复建议
+1,DMA Mode 重复初始化,中,在 ws2812b_init() 中再次设置 hdma_tim3_ch3.Init.Mode = DMA_CIRCULAR，而 CubeMX 已在 HAL_TIM_PWM_MspInit() 中初始化过。,移除 ws2812b_init() 中的重复 HAL_DMA_Init() 调用，仅在 CubeMX 中配置 Circular 模式
+2,update_sequence() 逻辑 Bug,高,led_cycles_cnt += LEDS_PER_DMA_IRQ 放在数据填充之前，导致计数错位；后复位判断条件容易提前结束或越界。,重构为标准的双缓冲 + 当前 LED 计数方式（推荐下面改进方案）
+3,复位时间不足,中,RESET_PRE_MIN=10、RESET_POST_MIN=8 过小（仅约 12.5μs + 10μs），WS2812B 需要 ≥50μs 低电平复位。,改为 RESET_PRE_MIN=50，RESET_POST_MIN=50（单位为 LED 周期 ≈1.25μs）
+4,DMA 缓冲区过小,中,当前 LEDS_PER_DMA_IRQ=4，缓冲区仅支持 8 个 LED，中断过于频繁。,建议改为 8~12，平衡 CPU 负载与实时性
+5,信号量永久等待风险,中,"ws2812b_demo_effects() 中使用 rt_sem_take(..., RT_WAITING_FOREVER)，若 DMA 异常停止会导致线程卡死。",增加超时机制，或改为非阻塞检查
+6,中断处理可能重复,中,同时调用 HAL_DMA_IRQHandler() 和手动读取/清除 HT/TC 标志，可能造成重复进入。,建议只保留手动 FLAG 处理，注释或移除 HAL_DMA_IRQHandler() 调用
+7,PWM 参数微调建议,低,PWM_HIGH_0=29、PWM_HIGH_1=58 基本可用，但建议用示波器实际验证 0/1 码时间。,目标：0码高电平 ≈0.4μs，1码高电平 ≈0.85μs

@@ -22,9 +22,9 @@
 #define PWM_PERIOD      89          // TIM周期值 (ARR = 89, 72MHz / 90 ≈ 800kHz)
 #define PWM_HIGH_0      29          // [FIX2] '0'高电平ticks ≈0.403μs (29/90 * 1.25μs)
 #define PWM_HIGH_1      58          // [FIX2] '1'高电平ticks ≈0.806μs (58/90 * 1.25μs)
-#define RESET_PRE_MIN   10          // 复位前最小LED周期 (参考文件: >280us ≈10 cycles)
-#define RESET_POST_MIN  8           // 复位后最小LED周期
-#define LEDS_PER_DMA_IRQ 4          // 每个DMA中断处理的LED数 (参考文件: 4, 平衡中断频率)
+#define RESET_PRE_MIN   50          // [FIX3] 复位前最小LED周期 (>50μs ≈50 cycles @1.25μs)
+#define RESET_POST_MIN  50          // [FIX3] 复位后最小LED周期
+#define LEDS_PER_DMA_IRQ 8          // [FIX4] 每个DMA中断处理的LED数 (中断频率减半)
 
 // 缓冲区：双缓冲 (HT/TC)，每个部分 LEDS_PER_DMA_IRQ * 24 个 uint16_t
 extern uint16_t ws2812_buffer[2 * LEDS_PER_DMA_IRQ * 24];
