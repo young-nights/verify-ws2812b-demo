@@ -112,7 +112,7 @@ rt_err_t ws2812b_update(void)
 
     // 启动PWM DMA (全缓冲长度)
     if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_3,
-                              (uint32_t *)ws2812_buffer,
+                              (uint16_t *)ws2812_buffer,
                               DMA_BUFF_LEN) != HAL_OK)
     {
         LOG_E("WS2812B DMA 启动失败");

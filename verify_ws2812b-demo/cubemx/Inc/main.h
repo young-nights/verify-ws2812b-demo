@@ -60,14 +60,11 @@ void MX_TIM3_Init(void);
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* Exported functions prototypes ---------------------------------------------*/
-
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define SPI1_NSS_Pin GPIO_PIN_12
-#define SPI1_NSS_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
