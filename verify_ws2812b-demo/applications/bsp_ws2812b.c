@@ -62,6 +62,8 @@ void ws2812b_init(void)
 // 设置单个LED颜色 (GRB顺序)
 void ws2812b_set_color(uint16_t index, uint8_t g, uint8_t r, uint8_t b)
 {
+    if (is_updating) return;  // Guard against concurrent DMA access
+
     if (index >= LED_COUNT) {
         LOG_W("LED索引超出范围: %d (最大: %d)", index, LED_COUNT - 1);
         return;
@@ -84,6 +86,8 @@ void ws2812b_set_all(uint8_t g, uint8_t r, uint8_t b)
 // 启动更新 (非阻塞)
 rt_err_t ws2812b_update(void)
 {
+    static uint8_t first_run = 1;
+
     if (is_updating) {
         LOG_W("WS2812B 正在更新中，跳过本次");
         return -RT_EBUSY;
@@ -92,7 +96,11 @@ rt_err_t ws2812b_update(void)
     is_updating = 1;
     led_index = 0;
 
-    HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_3);  // 确保干净启动
+    if (!first_run) {
+        HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_3);  // Stop DMA before restart
+    } else {
+        first_run = 0;
+    }
 
     memset(ws2812_buffer, 0, sizeof(ws2812_buffer));
 
@@ -145,7 +153,6 @@ void update_sequence(uint8_t is_tc)
         is_updating = 0;
         led_index = 0;
         rt_sem_release(dma_complete_sem);
-        LOG_D("WS2812B 更新完成");
     }
 }
 
